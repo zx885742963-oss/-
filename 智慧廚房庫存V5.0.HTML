@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>智慧廚房庫存 (V5.0)</title>
+    <style>
+        :root {
+            --metal: linear-gradient(135deg, #cfd8dc, #90a4ae);
+            --wood: linear-gradient(135deg, #a1887f, #6d4c41);
+            --accent: #3d5afe; --danger: #ff1744; --warning: #ffab40; --safe: #00c853;
+        }
+        body { font-family: 'Roboto', sans-serif; background: #f4f6f8; margin: 0; padding-top: 140px; -webkit-tap-highlight-color: transparent; }
+
+        /* 導航區 */
+        .header-nav { position: fixed; top: 0; width: 100%; z-index: 1000; background: #fff; padding: 25px 16px 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); box-sizing: border-box; }
+        .search-group { display: flex; gap: 8px; }
+        .search-bar { flex: 1; background: #f1f3f4; border: none; height: 45px; border-radius: 25px; padding: 0 20px; font-size: 16px; outline: none; }
+        .btn-fab { background: var(--accent); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(61, 90, 254, 0.3); }
+
+        /* 滑動視覺區 */
+        .scroller { display: flex; gap: 15px; overflow-x: auto; padding: 20px 16px; scrollbar-width: none; }
+        .scroller::-webkit-scrollbar { display: none; }
+        .unit-box { min-width: 280px; border-radius: 12px; padding: 12px; background: #fff; box-shadow: 5px 5px 15px rgba(0,0,0,0.05); }
+        .unit-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; color: #555; }
+
+        .grid-6x4, .living-grid-4x7 { display: grid; gap: 4px; padding: 4px; border-radius: 6px; }
+        .grid-6x4 { grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(4, 32px); background: #cfd8dc; }
+        .living-grid-4x7 { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(7, 28px); background: #d7ccc8; }
+        .cell, .l-cell { background: #fff; border-radius: 2px; font-size: 7px; display: flex; align-items: center; justify-content: center; color: #eee; }
+        .c-spec, .l-spec { color: #444; font-weight: bold; background: #fff; }
+        .c-fridge-body { grid-row: 2/5; background: var(--metal); color: white; }
+        .l-draw { background: #a1887f; color: white; }
+        .l-cab { background: #8d6e63; color: white; }
+        .l-table { background: #5d4037; color: #d7ccc8; grid-column: 3/5; grid-row: 6/8; }
+
+        .sync-group { display: flex; justify-content: space-between; padding: 0 16px; margin-top: -10px; margin-bottom: 10px; }
+        .btn-text { font-size: 12px; color: var(--accent); background: none; border: none; padding: 5px; text-decoration: underline; }
+
+        .list-area { padding: 0 16px 100px; }
+        .item-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 8px; display: flex; align-items: center; border-left: 5px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.03); cursor: pointer; }
+        .item-info { flex: 1; }
+        .item-name { font-weight: bold; font-size: 16px; display: block; }
+        .item-meta { font-size: 11px; color: #777; margin-top: 3px; }
+
+        /* 彈窗基礎 */
+        .sheet { position: fixed; bottom: -100%; left: 0; width: 100%; background: white; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 25px; box-sizing: border-box; transition: 0.4s; z-index: 2000; max-height: 80vh; overflow-y: auto; }
+        .sheet.active { bottom: 0; }
+        input, select, .btn-main, textarea { width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; box-sizing: border-box; }
+        .btn-main { background: var(--accent); color: white; border: none; font-weight: bold; }
+        .btn-delete { background: none; color: var(--danger); border: 1px solid var(--danger); margin-top: 8px; padding: 10px; border-radius: 12px; width: 100%; font-size: 14px; }
+
+        /* 過期提醒專用樣式 */
+        .alert-item { padding: 10px; border-bottom: 1px solid #eee; margin-bottom: 5px; }
+        .alert-title { color: var(--danger); font-weight: bold; font-size: 14px; }
+        .alert-detail { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav">
+    <div class="search-group">
+        <input type="text" id="search" class="search-bar" placeholder="🔍 搜尋庫存..." oninput="render()">
+        <button class="btn-fab" onclick="openAddMode()">＋</button>
+    </div>
+</div>
+
+<div class="scroller">
+    <div class="unit-box">
+        <div class="unit-title">❄️ 冰箱內部</div>
+        <div style="background:var(--metal); padding:10px; border-radius:10px;">
+            <div style="display:flex; flex-direction:column; gap:4px; background:rgba(255,255,255,0.3); padding:5px; border-radius:5px;">
+                <div style="background:#bbdefb; height:30px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px;">冷凍</div>
+                <div style="background:#e1f5fe; height:30px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px;">0度Zone</div>
+                <div style="background:#fff; height:50px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px;">冷藏</div>
+                <div style="background:#c8e6c9; height:30px; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:10px;">蔬果保鮮</div>
+            </div>
+        </div>
+    </div>
+    <div class="unit-box"><div class="unit-title">🍳 廚房系統</div><div class="grid-6x4" id="kitchenGrid"></div></div>
+    <div class="unit-box"><div class="unit-title"> Couch 客廳空間</div><div class="living-grid-4x7" id="livingGrid"></div></div>
+</div>
+
+<div class="sync-group">
+    <button class="btn-text" onclick="showExportSheet()">📤 備份資料/分享給家人</button>
+    <button class="btn-text" onclick="importData()">📥 匯入資料</button>
+</div>
+
+<div class="list-area" id="listArea"></div>
+
+<div id="backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1999;" onclick="closeAllSheets()"></div>
+<div id="alertSheet" class="sheet">
+    <h3 style="margin-top:0; color:var(--danger)">⚠️ 到期提醒 (5天內)</h3>
+    <div id="alertContent"></div>
+    <button class="btn-main" onclick="closeAllSheets()" style="margin-top:15px;">知道了</button>
+</div>
+
+<div id="exportSheet" class="sheet">
+    <h3 style="margin-top:0">備份代碼</h3>
+    <p style="font-size:12px; color:#666;">長按下方文字全選複製，傳送給家人：</p>
+    <textarea id="exportTextarea" rows="8" readonly onclick="this.select()"></textarea>
+    <button class="btn-main" onclick="closeAllSheets()">關閉</button>
+</div>
+
+<div id="editSheet" class="sheet">
+    <h3 id="sheetTitle" style="margin-top:0">新增項目</h3>
+    <input type="hidden" id="editId">
+    <input type="text" id="itemName" placeholder="名稱">
+    <div style="display:flex; gap:10px;">
+        <input type="number" id="itemQty" placeholder="數量" style="flex:1">
+        <input type="date" id="itemDate" style="flex:2">
+    </div>
+    <select id="itemLoc">
+        <optgroup label="❄️ 冰箱區">
+            <option value="冷凍">冷凍</option><option value="0度Zone">0度Zone</option><option value="冷藏">冷藏</option><option value="蔬果保鮮區">蔬果保鮮區</option>
+        </optgroup>
+        <optgroup label="🍳 廚房區">
+            <option value="冰箱上開櫃">冰箱上開櫃</option><option value="電器櫃開櫃">電器櫃開櫃</option><option value="電器櫃抽屜">電器櫃抽屜</option><option value="流理台開櫃">流理台開櫃</option><option value="抽拉櫃">抽拉櫃</option>
+        </optgroup>
+        <optgroup label="🛋️ 客廳區">
+            <option value="抽屜1">抽屜1</option><option value="抽屜2">抽屜2</option>
+            <option value="櫃1-1">櫃1-1</option><option value="櫃1-2">櫃1-2</option><option value="櫃1-3">櫃1-3</option>
+            <option value="櫃2-1">櫃2-1</option><option value="櫃2-2">櫃2-2</option><option value="櫃2-3">櫃2-3</option><option value="方桌">方桌</option>
+        </optgroup>
+    </select>
+    <button class="btn-main" onclick="handleSave()">儲存變更</button>
+    <button id="deleteBtn" class="btn-delete" onclick="handleDelete()">⚠️ 刪除此項目</button>
+</div>
+
+<script>
+    let inventory = JSON.parse(localStorage.getItem('kitchen_android_v38')) || [];
+
+    function initGrids() {
+        const kGrid = document.getElementById('kitchenGrid'); kGrid.innerHTML = '';
+        const kSpecs = { '1-1': '冰箱上', '1-2': '冰箱', '2-1': '電器開', '2-4': '電器抽', '3-1': '流理開', '6-4': '抽拉' };
+        for (let col = 1; col <= 6; col++) {
+            for (let row = 1; row <= 4; row++) {
+                if (col===1 && (row===3 || row===4)) continue;
+                const cell = document.createElement('div'); cell.className = 'cell';
+                if (kSpecs[`${col}-${row}`]) {
+                    cell.className += ' c-spec' + (col===1&&row===2?' c-fridge-body':'');
+                    cell.innerText = kSpecs[`${col}-${row}`];
+                    if(col===1&&row===2) cell.style.gridRow = '2/5';
+                } else { cell.innerText = `${col}-${row}`; }
+                kGrid.appendChild(cell);
+            }
+        }
+        const lGrid = document.getElementById('livingGrid'); lGrid.innerHTML = '';
+        const lSpecs = { '1-4':['l-draw','抽1'], '2-4':['l-draw','抽2'], '3-1':['l-cab','櫃1-1'], '3-2':['l-cab','櫃1-2'], '3-3':['l-cab','櫃1-3'], '4-1':['l-cab','櫃2-1'], '4-2':['l-cab','櫃2-2'], '4-3':['l-cab','櫃2-3'], '3-6':['l-table','方桌'] };
+        const occupied = new Set(['3-7', '4-6', '4-7']);
+        for (let row = 1; row <= 7; row++) {
+            for (let col = 1; col <= 4; col++) {
+                if (occupied.has(`${col}-${row}`)) continue;
+                const cell = document.createElement('div'); cell.className = 'l-cell';
+                const s = lSpecs[`${col}-${row}`];
+                if (s) { cell.className += ' l-spec ' + s[0]; cell.innerText = s[1]; }
+                else { cell.innerText = `${col}-${row}`; }
+                lGrid.appendChild(cell);
+            }
+        }
+    }
+
+    // --- 新增：啟動檢查功能 ---
+    function checkExpiry() {
+        const today = new Date().setHours(0,0,0,0);
+        const alerts = inventory.filter(item => {
+            const diff = Math.ceil((new Date(item.date) - today) / 86400000);
+            return diff <= 5; // 過期或5天內
+        }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        if (alerts.length > 0) {
+            const container = document.getElementById('alertContent');
+            container.innerHTML = '';
+            alerts.forEach(item => {
+                const diff = Math.ceil((new Date(item.date) - today) / 86400000);
+                const status = diff < 0 ? `已過期 ${Math.abs(diff)} 天` : diff === 0 ? "今天到期" : `${diff} 天後到期`;
+                container.innerHTML += `
+                    <div class="alert-item">
+                        <div class="alert-title">${item.name} (x${item.qty})</div>
+                        <div class="alert-detail">📍 位置：${item.loc}</div>
+                        <div class="alert-detail" style="color:var(--danger)">⏰ 狀態：${status} (${item.date})</div>
+                    </div>
+                `;
+            });
+            document.getElementById('alertSheet').classList.add('active');
+            document.getElementById('backdrop').style.display = 'block';
+        }
+    }
+
+    // --- 備份功能 ---
+    function showExportSheet() {
+        const dataStr = JSON.stringify(inventory);
+        const encoded = btoa(unescape(encodeURIComponent(dataStr)));
+        document.getElementById('exportTextarea').value = encoded;
+        document.getElementById('exportSheet').classList.add('active');
+        document.getElementById('backdrop').style.display = 'block';
+    }
+
+    function importData() {
+        const code = prompt("請貼上備份代碼：");
+        if (!code) return;
+        try {
+            const decoded = decodeURIComponent(escape(atob(code.trim())));
+            inventory = JSON.parse(decoded);
+            saveToStorage(); render();
+        } catch(e) { alert("代碼錯誤"); }
+    }
+
+    function closeAllSheets() {
+        document.querySelectorAll('.sheet').forEach(s => s.classList.remove('active'));
+        document.getElementById('backdrop').style.display = 'none';
+    }
+
+    function openAddMode() {
+        document.getElementById('sheetTitle').innerText = "新增項目";
+        document.getElementById('editId').value = "";
+        document.getElementById('itemName').value = "";
+        document.getElementById('itemQty').value = "";
+        document.getElementById('itemDate').value = "";
+        document.getElementById('deleteBtn').style.display = "none";
+        document.getElementById('editSheet').classList.add('active');
+        document.getElementById('backdrop').style.display = 'block';
+    }
+
+    function openEditMode(id) {
+        const item = inventory.find(i => i.id === id);
+        if(!item) return;
+        document.getElementById('sheetTitle').innerText = "編輯項目";
+        document.getElementById('editId').value = item.id;
+        document.getElementById('itemName').value = item.name;
+        document.getElementById('itemQty').value = item.qty;
+        document.getElementById('itemDate').value = item.date;
+        document.getElementById('itemLoc').value = item.loc;
+        document.getElementById('deleteBtn').style.display = "block";
+        document.getElementById('editSheet').classList.add('active');
+        document.getElementById('backdrop').style.display = 'block';
+    }
+
+    function handleSave() {
+        const id = document.getElementById('editId').value;
+        const name = document.getElementById('itemName').value;
+        const qty = document.getElementById('itemQty').value;
+        const date = document.getElementById('itemDate').value;
+        const loc = document.getElementById('itemLoc').value;
+        if(!name || !date) return alert("資訊不完整");
+        if(id) {
+            const idx = inventory.findIndex(i => i.id == id);
+            inventory[idx] = { ...inventory[idx], name, qty, date, loc };
+        } else {
+            inventory.push({ id: Date.now(), name, qty, date, loc });
+        }
+        saveToStorage(); closeAllSheets(); render();
+    }
+
+    function handleDelete() {
+        if(confirm('確定刪除？')) {
+            inventory = inventory.filter(i => i.id != document.getElementById('editId').value);
+            saveToStorage(); closeAllSheets(); render();
+        }
+    }
+
+    function saveToStorage() { localStorage.setItem('kitchen_android_v38', JSON.stringify(inventory)); }
+
+    function render() {
+        const area = document.getElementById('listArea');
+        const query = document.getElementById('search').value.toLowerCase();
+        area.innerHTML = '';
+        inventory.sort((a, b) => new Date(a.date) - new Date(b.date));
+        const today = new Date().setHours(0,0,0,0);
+        inventory.forEach(item => {
+            if(!item.name.toLowerCase().includes(query) && !item.loc.toLowerCase().includes(query)) return;
+            const diff = Math.ceil((new Date(item.date) - today) / 86400000);
+            let color = diff < 0 ? "var(--danger)" : diff <= 7 ? "var(--warning)" : "var(--safe)";
+            area.innerHTML += `
+                <div class="item-card" style="border-left-color: ${color}" onclick="openEditMode(${item.id})">
+                    <div class="item-info">
+                        <b class="item-name">${item.name} (x${item.qty})</b>
+                        <span class="item-meta">📍 ${item.loc} | 📅 ${item.date}</span>
+                    </div>
+                    <div style="color: ${color}; font-weight:bold;">${diff < 0 ? '過期' : diff + 'd'}</div>
+                </div>`;
+        });
+    }
+
+    // 啟動流程
+    initGrids(); 
+    render();
+    setTimeout(checkExpiry, 500); // 延遲半秒檢查過期，確保畫面已載入
+</script>
+</body>
+</html>
